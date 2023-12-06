@@ -2,11 +2,26 @@ use tokio::net::{TcpStream, TcpListener};
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use std::net::SocketAddr;
 
+// simply echo what client send
 async fn handle(mut client: TcpStream, addr: SocketAddr) {
-    let mut buff: [u8; 10] = [0;10];
-    client.write("Hello, World !\n".as_bytes()).await.unwrap();
-    let length = client.read(&mut buff).await.unwrap();
-    log::info!("{addr}: {}", String::from_utf8_lossy(&buff[0..length-1]));
+    let mut buff = [0;1024];
+
+    let length = match client.read(&mut buff).await {
+        Err(_) | Ok(0) => {
+            log::warn!("{addr}: Did not send a message");
+            return
+        },
+        Ok(length) => length,
+    };
+
+    let msg = String::from_utf8_lossy(&buff[0..length-1]);
+    log::info!("{addr}: {msg}");
+
+    match client.write(format!("=> {msg}\n").as_bytes()).await {
+        Ok(0) => log::warn!("{addr}: Server sent an empty string"),
+        Ok(_) => (),
+        Err(e) => log::error!("{addr}: {e}")
+    };
 }
 
 #[tokio::main]
@@ -25,7 +40,7 @@ async fn main() {
         let (client_stream, client_addr) = server.accept().await.unwrap();
         log::info!("New client from {client_addr}");
         tokio::spawn(async move {
-            handle(client_stream, client_addr.clone()).await;
+            handle(client_stream, client_addr).await;
             log::info!("Lost client from {client_addr}");
         });
     }
