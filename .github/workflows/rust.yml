@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - run: cd sjirc
     - uses: actions/checkout@v3
+    - run: cd sjirc
     - name: Build
       run: cargo build --verbose
     - name: Run tests
