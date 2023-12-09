@@ -19,19 +19,19 @@ struct IrcMessage {
 /// the client gets a prompt to enter its username
 /// if the user quit, the connection is closed
 /// otherwise the client is greeted
-async fn get_username(client: &mut TcpStream) -> Result<String, ()> {
+async fn get_username(client: &mut TcpStream) -> Option<String> {
     let mut buff = [0;USERNAME_LENGTH];
 
     client.write_all("your username: ".as_bytes()).await.unwrap();
     let length = match client.read(&mut buff).await {
-        Err(_) | Ok(0) => return Err(()),
+        Err(_) | Ok(0) => return None,
         Ok(length) => length,
     };
 
     let username = String::from_utf8_lossy(&buff[0..length-1]);
     client.write_all(format!("Welcome {username} !\n").as_bytes()).await.unwrap();
 
-    Ok(username.into())
+    Some(username.into())
 }
 
 /// handle a client sending a command (send message, go away, quit, ...)
@@ -63,16 +63,11 @@ async fn broadcast_incoming<'a>(irc_struct: IrcMessage, username: &String, write
 /// - get the username
 /// - select send/recv from broadcast
 async fn handle(mut client: TcpStream, addr: SocketAddr, sender: Sender<IrcMessage>, mut receiver: Receiver<IrcMessage>) {
-    let username = match get_username(&mut client).await {
-        Err(_) => {
-            log::warn!("{addr}: [username] not provided");
-            return
-        },
-        Ok(username) => {
-            log::info!("{addr}: [username] {username}");
-            username
-        }
+    let Some(username) = get_username(&mut client).await else {
+        log::warn!("{addr}: [username] not provided");
+        return;
     };
+    log::info!("{addr}: [username] {username}");
 
     let (reader, mut writer) = client.split();
     let mut reader = BufReader::new(reader);
